@@ -14,6 +14,61 @@ int Filter2d::alloc()
     plan_filtered2data = fftw_plan_dft_c2r_2d(y_size, x_size, datat_filtered, data,FFTW_ESTIMATE);//the last dimension has the fastest-varying index in the array
     return 0;
 }
+void 
+Filter2d::reset(int nx, int ny, int ld, int m)
+{
+    int m1 = m+1;
+    int x_len = nx*2 + 1;
+    int y_len = ny*2 + 1;
+    int col_len = x_len * y_len;
+    box_range.init(x_len, y_len);
+    int m11 = m1*(m1+1)/2;
+    double *jacobian = new double[ m11 * col_len ];
+    double *normal_matrix = new double[ m11 * m11];
+    for(int k = -ny; k <= ny; k++){
+        for(int s = -nx; s <= nx; s++){
+            int ii = box_range(s, k);
+            int col = 0;
+            for (int i = 0; i < m1; i++){
+                for(int j = 0; j < m1-i; j++, col++){
+                    double temp = jacobian[ ii + col* col_len]
+                    = pow (k, i) * pow(s, j);
+                }
+            }
+        }
+    }
+    
+    int mat_size = col_len*col_len;
+    double double_one = 1.;
+    double beta = 0.;
+    int row_len = m11;
+    cblas_dgemm(CblasColMajor,  CblasTrans,  CblasNoTrans, row_len, row_len, col_len, double_one, jacobian, col_len, jacobian, col_len,
+                beta, normal_matrix, row_len); // Normal = J*J
+    
+    int *ipiv = new int[row_len];
+    int info;
+    dgetrf_(&row_len, &row_len, normal_matrix, &row_len, ipiv, &info); //rf normal
+    double *work;
+    double worksize;
+    int lwork = -1;
+    dgetri_(&row_len, normal_matrix,&row_len, ipiv, &worksize, &lwork, &info);
+    lwork = (int) (worksize);
+    work = new double [lwork];
+    dgetri_(&row_len, normal_matrix,&row_len, ipiv, work, &lwork, &info);
+    double *cof=new double [row_len * col_len];
+    cblas_dgemm(CblasColMajor,  CblasNoTrans, CblasTrans, row_len, col_len, row_len, double_one, normal_matrix, row_len, jacobian, col_len,
+                beta, cof, row_len);
+
+    for(int i = 0; i < size; i++) data[i] = 0;
+    for(int j = -ny; j <= ny; j++){
+        for(int i = -nx; i <= nx; i++) {
+            double temp = data[filter_range(i, j)] //box_range?
+            = cof[row_len*(box_range(i, j))+ld];
+        }
+    }
+    fftw_execute(plan_data2filter);
+}
+
 
 Filter2d::Filter2d(int nx, int ny, int ld, int m, int xsize, int ysize):x_size(xsize),y_size(ysize)
 {

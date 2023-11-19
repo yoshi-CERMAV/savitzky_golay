@@ -1,3 +1,5 @@
+#ifndef SAVITSKY_GOLAY_2D_H
+#define SAVITSKY_GOLAY_2D_H
 #include <fftw3.h>
 #include <Accelerate/Accelerate.h>
 using namespace std;
@@ -40,6 +42,7 @@ class Filter2d
 public:
     Filter2d();
     Filter2d(int nx, int ny, int ld, int m, int sizex, int sizey);
+    void reset(int nx, int ny, int ld, int m);
     int apply(double *indata, double *outdata, int datas_size);
     ~Filter2d(){}
 protected:
@@ -65,3 +68,4 @@ protected:
     int free();
 };
 
+#endif
