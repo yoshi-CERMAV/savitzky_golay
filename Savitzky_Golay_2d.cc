@@ -14,15 +14,51 @@ int Filter2d::alloc()
     plan_filtered2data = fftw_plan_dft_c2r_2d(y_size, x_size, datat_filtered, data,FFTW_ESTIMATE);//the last dimension has the fastest-varying index in the array
     return 0;
 }
+
+void
+Filter2d::init_polynom(int in_nx, int in_ny, int in_ld, int in_m){
+    nx = in_nx;
+    ny = in_ny;
+    ld = in_ld;
+    m = in_m;
+    init_polynom();
+ //   init_filter();
+}
+
+void
+Filter2d::init_filter()
+{
+    for(int i = 0; i < size; i++) data[i] = 0;
+    for(int j = -ny; j <= ny; j++){
+        for(int i = -nx; i <= nx; i++) {
+            double temp = data[filter_range(i, j)] //box_range?
+            = cof[m11*(box_range(i, j))+ld];
+        }
+    }
+    fftw_execute(plan_data2filter);
+}
+
+void
+Filter2d::init_filter(int xsize, int ysize)
+{
+    x_size = xsize;
+    y_size = ysize;
+    size = x_size * y_size ;
+    size2 = (x_size/2 + 1) * y_size;
+    alloc();
+    filter_range.init(xsize, ysize);
+    init_filter();
+}
+
 void 
-Filter2d::reset(int nx, int ny, int ld, int m)
+Filter2d::init_polynom()
 {
     int m1 = m+1;
     int x_len = nx*2 + 1;
     int y_len = ny*2 + 1;
-    int col_len = x_len * y_len;
+    col_len = x_len * y_len;
     box_range.init(x_len, y_len);
-    int m11 = m1*(m1+1)/2;
+    m11 = m1*(m1+1)/2;
     double *jacobian = new double[ m11 * col_len ];
     double *normal_matrix = new double[ m11 * m11];
     for(int k = -ny; k <= ny; k++){
@@ -37,7 +73,7 @@ Filter2d::reset(int nx, int ny, int ld, int m)
             }
         }
     }
-    
+    cout << "jacobian"<<endl;
     int mat_size = col_len*col_len;
     double double_one = 1.;
     double beta = 0.;
@@ -45,155 +81,37 @@ Filter2d::reset(int nx, int ny, int ld, int m)
     cblas_dgemm(CblasColMajor,  CblasTrans,  CblasNoTrans, row_len, row_len, col_len, double_one, jacobian, col_len, jacobian, col_len,
                 beta, normal_matrix, row_len); // Normal = J*J
     
+    cout << "normal"<<endl;
     int *ipiv = new int[row_len];
     int info;
     dgetrf_(&row_len, &row_len, normal_matrix, &row_len, ipiv, &info); //rf normal
-    double *work;
     double worksize;
     int lwork = -1;
     dgetri_(&row_len, normal_matrix,&row_len, ipiv, &worksize, &lwork, &info);
     lwork = (int) (worksize);
-    work = new double [lwork];
+    double *work = new double [lwork];
     dgetri_(&row_len, normal_matrix,&row_len, ipiv, work, &lwork, &info);
-    double *cof=new double [row_len * col_len];
+    if(cof) delete[] cof;
+    cof=new double [row_len * col_len];
     cblas_dgemm(CblasColMajor,  CblasNoTrans, CblasTrans, row_len, col_len, row_len, double_one, normal_matrix, row_len, jacobian, col_len,
                 beta, cof, row_len);
-
-    for(int i = 0; i < size; i++) data[i] = 0;
-    for(int j = -ny; j <= ny; j++){
-        for(int i = -nx; i <= nx; i++) {
-            double temp = data[filter_range(i, j)] //box_range?
-            = cof[row_len*(box_range(i, j))+ld];
-        }
-    }
-    fftw_execute(plan_data2filter);
+    cout <<"deleting"<<endl;
+    delete [] work;
+    delete [] ipiv;
+    delete [] normal_matrix;
+    delete [] jacobian;
 }
 
 
 Filter2d::Filter2d(int nx, int ny, int ld, int m, int xsize, int ysize):x_size(xsize),y_size(ysize)
 {
 //    double *temp = reinterpret_cast<double *>( fftw_malloc(sizeof(double) * size));
-    int m1 = m+1;
-    int x_len = nx*2 + 1;
-    int y_len = ny*2 + 1;
-	int col_len = x_len * y_len;
-    size = x_size * y_size;
-    size2 = (x_size/2 +1) * y_size;
-    alloc();
-    box_range.init(x_len, y_len);
-    filter_range.init(xsize, ysize);
 
-
-    int m11 = m1*(m1+1)/2;
-    double *jacobian = new double[ m11 * col_len ];
-    double *normal_matrix = new double[ m11 * m11];
-	for(int k = -ny; k <= ny; k++){
-        for(int s = -nx; s <= nx; s++){
-            int ii = box_range(s, k);
-            int col = 0;
-            for (int i = 0; i < m1; i++){
-                for(int j = 0; j < m1-i; j++, col++){
- //                   int jj =((i * m1) + j);
-                    double temp = jacobian[ ii + col* col_len]
-                    = pow (k, i) * pow(s, j);
-                    //cout << ii <<" "<< col <<" "<<temp<<endl;
-                }
-            }
-        }
-        //cout << endl;
-    }
-    
-	int mat_size = col_len*col_len;	
-//	double *unit_mat = new double[ mat_size ];
-//	for(int i = 0; i < mat_size; i+= col_len)  unit_mat[i] = 1;
-
-	
-	double double_one = 1.;
-	double beta = 0.;
-    int row_len = m11;
-//	cout <<"dgemm"<<endl;
-//	cout << col_len <<" "<<col_len<<" "<<row_len<<" "<<double_one<<" "<<beta<<endl;
-	cblas_dgemm(CblasColMajor,  CblasTrans,  CblasNoTrans, row_len, row_len, col_len, double_one, jacobian, col_len, jacobian, col_len,
-				beta, normal_matrix, row_len); // Normal = J*J
-	//cout <<"dgemm finished"<<endl;
-	
-	int *ipiv = new int[row_len]; 
-	int info;
-    for(int i = 0; i < row_len; i++){
-        for(int j = 0; j< row_len; j++){
-            //cout << normal_matrix[j*row_len + i]<<" ";
-        }
-//        cout << endl;
-    }
-	
-	
-	dgetrf_(&row_len, &row_len, normal_matrix, &row_len, ipiv, &info); //rf normal
-#ifdef VERBOSE_
-    for(int i = 0; i < row_len; i++){
-        for(int j = 0; j< row_len; j++){
-            cout << normal_matrix[j*row_len + i]<<" ";
-        }
-        cout<< ipiv[i] << endl;
-    }
-    cout<<endl;
-#endif
-	double *work;
-	double worksize;
-	int lwork = -1;	
-	dgetri_(&row_len, normal_matrix,&row_len, ipiv, &worksize, &lwork, &info);
-	lwork = (int) (worksize);
-	work = new double [lwork];
-	
-	dgetri_(&row_len, normal_matrix,&row_len, ipiv, work, &lwork, &info);
-#ifdef VERBOSE_	
-    for(int i = 0; i < row_len; i++){
-        for(int j = 0; j< row_len; j++){
-            cout << normal_matrix[j*row_len + i]<<" ";
-        }
-        cout<< ipiv[i] << endl;
-    }
-	cout << lwork << "dgetri"<<endl;
-    for(int i = 0; i < col_len; i++){
-        for(int j = 0; j < row_len; j++ ){
-            cout << jacobian[j*col_len + i]<<" ";
-        }
-        cout << endl;
-    }
-#endif
-	double *cof=new double [row_len * col_len];
-	cblas_dgemm(CblasColMajor,  CblasNoTrans, CblasTrans, row_len, col_len, row_len, double_one, normal_matrix, row_len, jacobian, col_len,
-				beta, cof, row_len);
-    
-#ifdef VERBOSE_
-    cout <<"cof"<<endl;
-    int posi = 0;
-    for(int j = 0; j < y_len; j++){
-        for(int i = 0; i < x_len; i++, posi++){
-            cout << cof[posi*row_len]<<" ";
-        }cout << endl;
-    }
-	cout <<"dgemm"<<endl;
-	cout << "reset"<<endl;
-#endif
-    for(int i = 0; i < size; i++) data[i] = 0;
-//	cout << "copie"<<endl;
-    for(int j = -ny; j <= ny; j++){
-        for(int i = -nx; i <= nx; i++) {
-            double temp = data[filter_range(i, j)] //box_range?
-            = cof[row_len*(box_range(i, j))+ld];
-    //        cout << temp<<" "<<box_range(i, j)<<" ";
-        }
-        //cout << endl;
- //       for(int j = 0; j< row_len; j++){
-//				cout << cof[box_range(i, j)*row_len + j]<<" ";
-  //      }
-   //     cout<< ipiv[i] << endl;
-    }
-//	cout << "data2filter"<<endl;
-	fftw_execute(plan_data2filter);	
-	//	for(int i = 0; i < 32*32*16; i++) cout << filter[i][0]<<" "<<filter[i][1]<<"\t";
-//	cout << "fft done"<<endl;
-	
+    cout << "constructing"<<endl;
+    init_polynom(nx, ny, ld, m);
+    cout << " polynom OK"<<endl;
+    init_filter(xsize, ysize);
+    cout << "init filter "<<endl;
 }
 
 

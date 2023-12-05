@@ -2,7 +2,6 @@
 #define SAVITSKY_GOLAY_2D_H
 #include <fftw3.h>
 #include <Accelerate/Accelerate.h>
-#include <iostream>
 using namespace std;
 
 class Range2d
@@ -44,15 +43,8 @@ public:
     Filter2d();
     Filter2d(int nx, int ny, int ld, int m, int sizex, int sizey);
     void reset(int nx, int ny, int ld, int m);
-    void init_polynom(int nx, int ny, int ld, int m);
-    void init_polynom();
-    void init_filter(int xsize, int ysize);
-    void init_filter();
-
     int apply(double *indata, double *outdata, int datas_size);
-    ~Filter2d(){
-        free();
-    }
+    ~Filter2d(){}
 protected:
     Range2d box_range;
     Range2d filter_range;
@@ -63,14 +55,9 @@ protected:
     int roi;
     int nx;
     int ny;
-    int ld;
-    int m;
-    int m11;
-    int col_len;
-    
-    double *cof = NULL;
-    
-    double *data=NULL;
+    int diff;
+    int poly_order;
+    double *data;
     fftw_complex *datat;
     fftw_complex *filter;
     fftw_complex *datat_filtered;
@@ -78,21 +65,7 @@ protected:
     fftw_plan plan_data2datat;
     fftw_plan plan_filtered2data;
     int alloc();
-    int free(){
-        fftw_free(datat_filtered);
-        fftw_free(datat);
-        fftw_free(data);
-        fftw_free(filter);
-        return 0;
-    }
-    int print_jacobian(double *jacobian){
-        for(int i = 0; i < m11 ; i++){
-            for(int j = 0; j < col_len; j++){
-                cout << jacobian[j+ i*col_len]<<" ";
-            }cout << endl;
-        }
-        return 0;
-    }
+    int free();
 };
 
 #endif

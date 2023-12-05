@@ -5,7 +5,6 @@
 #include "range.h"
 using namespace std;
 
-
 class Range3d
 {
 public:
@@ -55,8 +54,18 @@ class Filter3d
 public:
     Filter3d();
     Filter3d(int nx, int ny, int nz, int ld, int m, int sizex, int sizey, int sizez);
+    void init_polynom(int nx, int ny, int nz, int ld, int m);
+    void init_polynom();
+    void init_filter(int sizex, int sizey, int sizez);
+    void init_filter();
     int apply(double *indata, double *outdata, int datas_size);
-    ~Filter3d(){}
+    ~Filter3d()
+    {
+        fftw_free(datat_filtered);
+        fftw_free(datat);
+        fftw_free(data);
+        fftw_free(filter);
+    }
 protected:
     Range3d box_range;
     Range3d filter_range;
@@ -69,8 +78,14 @@ protected:
     int nx;
     int ny;
     int nz;
-    int diff;
+    int ld;
+    int m;
+    int m11;
     int poly_order;
+    double *cof = NULL;
+    double *work = NULL;
+    int *ipiv = NULL;
+    
     double *data;
     fftw_complex *datat;
     fftw_complex *filter;
